@@ -46,6 +46,7 @@ Inductive instruction: Type :=
 | popl: register -> instruction.
 
 Ltac size := compute; omega.
+(*
 Notation "'imm' i" := (imm (num constant_bits i ltac:(size)))
                       (at level 90).
 Notation "'reg' r" := (reg (num register_bits r ltac:(size)))
@@ -57,3 +58,5 @@ Notation "'dst' d" := (dst (num constant_bits d ltac:(size)))
 
 Example ex1 := (rrmovl none (reg 1) (reg 2)).
 Example ex2 := (call (dst 5)).
+*)
+Definition instructions := list instruction.
