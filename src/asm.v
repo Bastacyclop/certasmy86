@@ -4,20 +4,51 @@ Require Import Lists.List.
 Import ListNotations.
 Require Import ast.
 
-Fixpoint asm_number_rec
-         (n: N) (bit: nat) (acc: list bool): list bool :=
-  match bit with
+Fixpoint encode_number_rec
+         (n: N) (bits: nat) (acc: list bool): list bool :=
+  match bits with
   | 0 => acc
-  | S b => asm_number_rec
-             n b (cons (N.testbit n (N.of_nat bit)) acc)
+  | S b => encode_number_rec
+             (N.shiftr n 1) b (cons (N.testbit n 0) acc)
   end.
 
-Definition asm_number {bits} (n: number bits): list bool :=
+(* Encodes a number into binary (little endian) *)
+Definition encode_number {bits} (n: number bits): list bool :=
   match n with
-  | num _ n _ => asm_number_rec n (pred bits) nil
+  | num _ n _ => encode_number_rec n bits nil
   end.
 
-Definition asm_operator_num (op: operator): N :=
+Lemma encode_number_rec_bits:
+  forall (bits: nat) (n: N) (acc: list bool),
+    List.length (encode_number_rec n bits acc)
+    = (List.length acc) + bits.
+Proof.
+  induction bits; intros.
+  - trivial.
+  - simpl.
+    rewrite <- plus_n_Sm.
+    apply IHbits.
+Qed.
+
+Lemma encode_number_bits {bits}: forall (n: number bits),
+    List.length (encode_number n) = bits.
+Proof.
+  induction n.
+  simpl. rewrite encode_number_rec_bits.
+  trivial.
+Qed.
+
+Notation "'b[' n ';' b ']'" := (encode_number (num b n ltac:(size)))
+                                 (at level 60).
+
+Goal b[0; 4] = [false; false; false; false].
+Proof. trivial. Qed.
+Goal b[5; 4] = [false; true; false; true].
+Proof. trivial. Qed.
+Goal b[15; 4] = [true; true; true; true].
+Proof. trivial. Qed.
+
+Definition encode_operator_num (op: operator): N :=
   match op with
   | addl => 0
   | subl => 1
@@ -25,16 +56,16 @@ Definition asm_operator_num (op: operator): N :=
   | xorl => 3
   end.
 
-Fact asm_operator_4bits (op: operator):
-  (N.size_nat (asm_operator_num op)) <= 4.
+Fact encode_operator_4bits (op: operator):
+  (N.size_nat (encode_operator_num op)) <= 4.
 Proof. case op; size. Qed.
 
-Definition asm_operator (op: operator): list bool :=
-  (asm_number (num 4
-                   (asm_operator_num op)
-                   (asm_operator_4bits op))).
+Definition encode_operator (op: operator): list bool :=
+  (encode_number (num 4
+                      (encode_operator_num op)
+                      (encode_operator_4bits op))).
 
-Definition asm_condition_num (cond: condition): N :=
+Definition encode_condition_num (cond: condition): N :=
   match cond with
   | none => 0
   | le => 1
@@ -45,83 +76,66 @@ Definition asm_condition_num (cond: condition): N :=
   | g => 6
   end.
 
-Fact asm_condition_4bits (cond: condition):
-  N.size_nat (asm_condition_num cond) <= 4.
+Fact encode_condition_4bits (cond: condition):
+  N.size_nat (encode_condition_num cond) <= 4.
 Proof. case cond; size. Qed.
 
-Definition asm_condition (cond: condition): list bool :=
-  (asm_number (num 4
-                   (asm_condition_num cond)
-                   (asm_condition_4bits cond))).
+Definition encode_condition (cond: condition): list bool :=
+  (encode_number (num 4
+                      (encode_condition_num cond)
+                      (encode_condition_4bits cond))).
 
-Definition asm_instruction (i: instruction): list bool :=
+Definition encode_instruction (i: instruction): list bool :=
   match i with
-  | halt =>
-    (asm_number (num 4 0 ltac:(size)))
-      ++ (asm_number (num 4 0 ltac:(size)))
-  | nop =>
-    (asm_number (num 4 1 ltac:(size)))
-      ++ (asm_number (num 4 0 ltac:(size)))
+  | halt => b[0; 4] ++ b[0; 4]
+  | nop => b[1; 4] ++ b[0; 4]
   | rrmovl cond (reg ra) (reg rb) =>
-    (asm_number (num 4 2 ltac:(size)))
-      ++ (asm_condition cond)
-      ++ (asm_number ra)
-      ++ (asm_number rb)
+    b[2; 4]
+     ++ (encode_condition cond)
+     ++ (encode_number ra)
+     ++ (encode_number rb)
   | irmovl (imm v) (reg rb) =>
-    (asm_number (num 4 3 ltac:(size)))
-      ++ (asm_number (num 4 0 ltac:(size)))
-      ++ (asm_number (num 4 15 ltac:(size)))
-      ++ (asm_number rb)
-      ++ (asm_number v)
+    b[3; 4] ++ b[0; 4] ++ b[15; 4]
+     ++ (encode_number rb)
+     ++ (encode_number v)
   | rmmovl (reg ra) (dsp d) (reg rb) =>
-    (asm_number (num 4 4 ltac:(size)))
-      ++ (asm_number (num 4 0 ltac:(size)))
-      ++ (asm_number ra)
-      ++ (asm_number rb)
-      ++ (asm_number d)
+    b[4; 4] ++ b[0; 4]
+     ++ (encode_number ra)
+     ++ (encode_number rb)
+     ++ (encode_number d)
   | mrmovl (dsp d) (reg ra) (reg rb) =>
-    (asm_number (num 4 5 ltac:(size)))
-      ++ (asm_number (num 4 0 ltac:(size)))
-      ++ (asm_number ra)
-      ++ (asm_number rb)
-      ++ (asm_number d)
+    b[5; 4] ++ b[0; 4]
+     ++ (encode_number ra)
+     ++ (encode_number rb)
+     ++ (encode_number d)
   | OPl op (reg ra) (reg rb) =>
-    (asm_number (num 4 6 ltac:(size)))
-      ++ (asm_operator op)
-      ++ (asm_number ra)
-      ++ (asm_number rb)
+    b[6; 4]
+     ++ (encode_operator op)
+     ++ (encode_number ra)
+     ++ (encode_number rb)
   | jump cond (dst d) =>
-    (asm_number (num 4 7 ltac:(size)))
-      ++ (asm_condition cond)
-      ++ (asm_number d)
+    b[7; 4]
+     ++ (encode_condition cond)
+     ++ (encode_number d)
   | call (dst d) =>
-    (asm_number (num 4 8 ltac:(size)))
-      ++ (asm_number (num 4 0 ltac:(size)))
-      ++ (asm_number d)
-  | ret =>
-    (asm_number (num 4 9 ltac:(size)))
-      ++ (asm_number (num 4 0 ltac:(size)))
+    b[8; 4] ++ b[0; 4]
+     ++ (encode_number d)
+  | ret => b[9; 4] ++ b[0; 4]
   | pushl (reg ra) =>
-    (asm_number (num 4 10 ltac:(size)))
-      ++ (asm_number (num 4 0 ltac:(size)))
-      ++ (asm_number ra)
-      ++ (asm_number (num 4 15 ltac:(size)))
+    b[10; 4] ++ b[0; 4] ++ (encode_number ra) ++ b[15; 4]
   | popl (reg ra) =>
-    (asm_number (num 4 11 ltac:(size)))
-      ++ (asm_number (num 4 0 ltac:(size)))
-      ++ (asm_number ra)
-      ++ (asm_number (num 4 15 ltac:(size)))
+    b[11; 4] ++ b[0; 4] ++ (encode_number ra) ++ b[15; 4]
   end.
 
-Fixpoint asm_rev (ins: instructions): list bool :=
+Fixpoint encode_rev (ins: instructions): list bool :=
   match ins with
-  | cons i ins => List.rev_append (asm_instruction i)
-                                  (asm_rev ins)
+  | cons i ins => List.rev_append (encode_instruction i)
+                                  (encode_rev ins)
   | nil => nil
   end.
 
-Definition asm (ins: instructions): list bool :=
-  List.rev (asm_rev ins).
+Definition encode (ins: instructions): list bool :=
+  List.rev (encode_rev ins).
 
 Definition dasm (binary: list bool): option instructions :=
   None.
