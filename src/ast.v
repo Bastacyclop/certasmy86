@@ -1,20 +1,17 @@
 Require Import Coq.Arith.Arith.
 Require Import Coq.omega.Omega.
 
-Inductive number (bits: nat): Set :=
-| num: forall (x: N), (N.size_nat x) <= bits -> number bits.
-
 Definition constant_bits := 32.
 Definition register_bits := 4.
 
 Inductive immediate: Type :=
-| imm: forall (i: number constant_bits), immediate.
+| imm: forall (i: N), immediate.
 Inductive displacement: Type :=
-| dsp: forall (d: number constant_bits), displacement.
+| dsp: forall (d: N), displacement.
 Inductive destination: Type :=
-| dst: forall (d: number constant_bits), destination.
+| dst: forall (d: N), destination.
 Inductive register: Type :=
-| reg: forall (r: number register_bits), register.
+| reg: forall (r: N), register.
 
 Inductive operator: Set :=
 | addl
@@ -45,18 +42,4 @@ Inductive instruction: Type :=
 | pushl: register -> instruction
 | popl: register -> instruction.
 
-Ltac size := compute; omega.
-(*
-Notation "'imm' i" := (imm (num constant_bits i ltac:(size)))
-                      (at level 90).
-Notation "'reg' r" := (reg (num register_bits r ltac:(size)))
-                      (at level 90).
-Notation "'dsp' d" := (dsp (num constant_bits d ltac:(size)))
-                      (at level 90).
-Notation "'dst' d" := (dst (num constant_bits d ltac:(size)))
-                      (at level 90).
-
-Example ex1 := (rrmovl none (reg 1) (reg 2)).
-Example ex2 := (call (dst 5)).
-*)
 Definition instructions := list instruction.
