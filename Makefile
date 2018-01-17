@@ -1,7 +1,7 @@
 SRC_DIR = src
 BUILD_DIR = $(SRC_DIR)
-SOURCE_FILES := ast.v asm.v dasm.v
-BINARY_FILES := $(patsubst %.v,$(BUILD_DIR)/%.vo,$(SOURCE_FILES)) $(patsubst %.v,$(BUILD_DIR)/.%.vo.aux,$(SOURCE_FILES)) $(patsubst %.v,$(BUILD_DIR)/%.glob,$(SOURCE_FILES))
+SOURCE_FILES := ast.v encode.v decode.v bijection.v
+BINARY_FILES := $(patsubst %.v,$(BUILD_DIR)/%.vo,$(SOURCE_FILES))
 SOURCE_FILES := $(patsubst %,$(SRC_DIR)/%,$(SOURCE_FILES))
 
 .PHONY: all
@@ -14,4 +14,4 @@ $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
 clean:
-	@rm $(BINARY_FILES) 2>/dev/null || true
+	@rm src/*.vo src/*.aux src/*.glob 2>/dev/null || true
