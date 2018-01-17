@@ -106,14 +106,16 @@ Proof.
     + simpl. specialize IHn with (l). omega.
 Qed.
 
-Lemma number_consumes:
-  forall (bits: nat) (s s': stream) (n: N),
-    number (S bits) s = Some (n, s') ->
+Definition consumes {R} (f: stream -> option (R * stream)) :=
+  forall (s s': stream)(r: R),
+    f s = Some (r, s') ->
     List.length s' < List.length s.
+
+Lemma number_consumes:
+  forall (bits: nat), consumes (number (S bits)).
 Proof.
-  intros.
-  unfold number in H.
-  specialize number_rec_skipn with ((S bits))(s)(0%N)(n)(s').
+  unfold number, consumes. intros.
+  specialize number_rec_skipn with ((S bits))(s)(0%N)(r)(s').
   intros.
   assert (s' = skipn (S bits) s). {
     apply H0. apply H.
@@ -133,6 +135,24 @@ Definition expect (bits: nat) (expected: N) (s: stream):
     then Some (tt, s)
     else None.
 
+Ltac mcase e H p HR :=
+  case_eq e; try intros p HR; try intros HR; rewrite HR in H;
+  try destruct p; try discriminate.
+Ltac consumes fact I H :=
+  try (injection I; intros; subst);
+  eapply fact; apply H.
+Ltac number_consumes := consumes number_consumes.
+
+Fact expect_consumes:
+  forall (bits: nat) (ex: N), consumes (expect (S bits) ex).
+Proof.
+  unfold expect, consumes. intros.
+  mcase (number (S bits) s) H p H0.
+  destruct ((n =? ex)%N).
+  - number_consumes H H0.
+  - discriminate.
+Qed.
+
 (* Actual Code *)
 
 Definition condition (s: stream):
@@ -149,23 +169,57 @@ Definition condition (s: stream):
   | _ => None
   end.
 
+Fact condition_consumes: consumes (condition).
+Proof.
+  unfold condition, consumes. intros.
+  mcase (number 4 s) H p H0.
+  destruct n;
+    do 3 try destruct p;
+    try discriminate;
+    try number_consumes H H0.
+Qed.
+
 (* TODO: whatappenz with invalid values *)
+
+Ltac map_number_consumes n e s H p HR :=
+  unfold n, consumes; intros;
+  mcase (number e s) H p HR; number_consumes H HR.
 
 Definition register (s: stream): option (ast.register * stream) :=
   do (n, s) <- (number ast.register_bits s);
   Some (ast.reg n, s).
 
+Fact register_consumes: consumes (register).
+Proof.
+  map_number_consumes register ast.register_bits s H p H0.
+Qed.
+
 Definition immediate (s: stream): option (ast.immediate * stream) :=
   do (n, s) <- (number ast.constant_bits s);
   Some (ast.imm n, s).
+
+Fact immediate_consumes: consumes (immediate).
+Proof.
+  map_number_consumes immediate ast.constant_bits s H p H0.
+Qed.
 
 Definition displacement (s: stream): option (ast.displacement * stream) :=
   do (n, s) <- (number ast.constant_bits s);
   Some (ast.dsp n, s).
 
+Fact displacement_consumes: consumes (displacement).
+Proof.
+  map_number_consumes displacement ast.constant_bits s H p H0.
+Qed.
+
 Definition destination (s: stream): option (ast.destination * stream) :=
   do (n, s) <- (number ast.constant_bits s);
   Some (ast.dst n, s).
+
+Fact destination_consumes: consumes (destination).
+Proof.
+  map_number_consumes destination ast.constant_bits s H p H0.
+Qed.
 
 (* Actual instruction decoding *)
 
@@ -175,12 +229,46 @@ Definition rrmovl (s: stream): option (ast.instruction * stream) :=
   do (reg2, s) <- (register s);
   Some (ast.rrmovl cond reg1 reg2, s).
 
+Ltac assert_consumes e H n HR s s' :=
+  mcase e H n HR;
+  assert (length s' < length s).
+Ltac consumes_trans s' :=
+  apply lt_trans with (length s'); try assumption.
+
+Fact rrmovl_consumes: consumes (rrmovl).
+Proof.
+  unfold consumes, rrmovl. intros.
+  assert_consumes (condition s) H x Hx s s0.
+  consumes condition_consumes H Hx.
+  consumes_trans s0.
+  assert_consumes (register s0) H y Hy s0 s1.
+  consumes register_consumes H Hy.
+  consumes_trans s1.
+  assert_consumes (register s1) H z Hz s1 s2.
+  consumes register_consumes H Hz.
+  injection H. intros. subst. assumption.
+Qed.
+
 Definition irmovl (s: stream): option (ast.instruction * stream) :=
   (* 15 is 0x0F, it's required by the spec *)
   do (n, s) <- (expect 8 15 s);
   do (reg1, s) <- (register s);
   do (val, s) <- (immediate s);
   Some (ast.irmovl val reg1, s).
+
+Fact irmovl_consumes: consumes (irmovl).
+Proof.
+  unfold consumes, irmovl. intros.
+  assert_consumes (expect 8 15 s) H x Hx s s0.
+  consumes expect_consumes H Hx.
+  consumes_trans s0.
+  assert_consumes (register s0) H y Hy s0 s1.
+  consumes register_consumes H Hy.
+  consumes_trans s1.
+  assert_consumes (immediate s1) H z Hz s1 s2.
+  consumes immediate_consumes H Hz.
+  injection H. intros. subst. assumption.
+Qed.
 
 Definition rmmovl (s: stream): option (ast.instruction * stream) :=
   do (n, s) <- (expect 4 0 s);
@@ -189,12 +277,46 @@ Definition rmmovl (s: stream): option (ast.instruction * stream) :=
   do (val, s) <- (displacement s);
   Some (ast.rmmovl reg1 val reg2, s).
 
+Fact rmmovl_consumes: consumes (rmmovl).
+Proof.
+  unfold consumes, rmmovl. intros.
+  assert_consumes (expect 4 0 s) H x Hx s s0.
+  consumes expect_consumes H Hx.
+  consumes_trans s0.
+  assert_consumes (register s0) H y Hy s0 s1.
+  consumes register_consumes H Hy.
+  consumes_trans s1.
+  assert_consumes (register s1) H z Hz s1 s2.
+  consumes register_consumes H Hz.
+  consumes_trans s2.
+  assert_consumes (displacement s2) H d Hd s2 s3.
+  consumes displacement_consumes H Hd.
+  injection H. intros. subst. assumption.
+Qed.
+
 Definition mrmovl (s: stream): option (ast.instruction * stream) :=
-  do (n, s) <- (expect 0 4 s);
+  do (n, s) <- (expect 4 0 s);
   do (reg1, s) <- (register s);
   do (reg2, s) <- (register s);
   do (val, s) <- (displacement s);
   Some (ast.mrmovl val reg1 reg2, s).
+
+Fact mrmovl_consumes: consumes (mrmovl).
+Proof.
+  unfold consumes, mrmovl. intros.
+  assert_consumes (expect 4 0 s) H x Hx s s0.
+  consumes expect_consumes H Hx.
+  consumes_trans s0.
+  assert_consumes (register s0) H y Hy s0 s1.
+  consumes register_consumes H Hy.
+  consumes_trans s1.
+  assert_consumes (register s1) H z Hz s1 s2.
+  consumes register_consumes H Hz.
+  consumes_trans s2.
+  assert_consumes (displacement s2) H d Hd s2 s3.
+  consumes displacement_consumes H Hd.
+  injection H. intros. subst. assumption.
+Qed.
 
 Definition op (s: stream): option (ast.operator * stream) :=
   do (n, s) <- (number 4 s);
@@ -206,39 +328,126 @@ Definition op (s: stream): option (ast.operator * stream) :=
   | _ => None
   end.
 
+Fact op_consumes: consumes (op).
+Proof.
+  unfold op, consumes. intros.
+  mcase (number 4 s) H p H0.
+  destruct n;
+    do 3 try destruct p;
+    try discriminate;
+    try number_consumes H H0.
+Qed.
+
 Definition OPl (s: stream): option (ast.instruction * stream) :=
   do (op, s) <- (op s);
   do (reg1, s) <- (register s);
   do (reg2, s) <- (register s);
   Some (ast.OPl op reg1 reg2, s).
 
+Fact OPl_consumes: consumes (OPl).
+Proof.
+  unfold consumes, OPl. intros.
+  assert_consumes (op s) H x Hx s s0.
+  consumes op_consumes H Hx.
+  consumes_trans s0.
+  assert_consumes (register s0) H y Hy s0 s1.
+  consumes register_consumes H Hy.
+  consumes_trans s1.
+  assert_consumes (register s1) H z Hz s1 s2.
+  consumes register_consumes H Hz.
+  injection H. intros. subst. assumption.
+Qed.
+
 Definition jump (s: stream): option (ast.instruction * stream) :=
   do (cond, s) <- (condition s);
   do (dest, s) <- (destination s);
   Some (ast.jump cond dest, s).
 
+Fact jump_consumes: consumes (jump).
+Proof.
+  unfold consumes, jump. intros.
+  assert_consumes (condition s) H x Hx s s0.
+  consumes condition_consumes H Hx.
+  consumes_trans s0.
+  assert_consumes (destination s0) H y Hy s0 s1.
+  consumes destination_consumes H Hy.
+  injection H. intros. subst. assumption.
+Qed.
+
+Definition call (s: stream): option (ast.instruction * stream) :=
+  do (_, s) <- (expect 4 0 s);
+  do (dest, s) <- (destination s);
+  Some (ast.call dest, s).
+
+Fact call_consumes: consumes (call).
+Proof.
+  unfold call, consumes. intros.
+  assert_consumes (expect 4 0 s) H x Hx s s0.
+  consumes expect_consumes H Hx.
+  consumes_trans s0.
+  assert_consumes (destination s0) H y Hy s0 s1.
+  consumes destination_consumes H Hy.
+  injection H. intros. subst. assumption.
+Qed.
+
 Definition ret (s: stream): option (ast.instruction * stream) :=
-  do (n, s) <- (expect 0 4 s);
+  do (n, s) <- (expect 4 0 s);
   Some (ast.ret, s).
 
+Fact ret_consumes: consumes (ret).
+Proof.
+  unfold consumes, ret. intros.
+  assert_consumes (expect 4 0 s) H x Hx s s0.
+  consumes expect_consumes H Hx.
+  injection H. intros. subst. assumption.
+Qed.
+
 Definition pushl (s: stream): option (ast.instruction * stream) :=
-  do (n, s) <- (expect 0 4 s);
+  do (n, s) <- (expect 4 0 s);
   do (reg1, s) <- (register s);
-  do (n, s) <- (expect 15 4 s);
+  do (n, s) <- (expect 4 15 s);
   Some (ast.pushl reg1, s).
 
+Fact pushl_consumes: consumes (pushl).
+Proof.
+  unfold consumes, pushl. intros.
+  assert_consumes (expect 4 0 s) H x Hx s s0.
+  consumes expect_consumes H Hx.
+  consumes_trans s0.
+  assert_consumes (register s0) H y Hy s0 s1.
+  consumes register_consumes H Hy.
+  consumes_trans s1.
+  assert_consumes (expect 4 15 s1) H z Hz s1 s2.
+  consumes expect_consumes H Hz.
+  injection H. intros. subst. assumption.
+Qed.
+
 Definition popl (s: stream): option (ast.instruction * stream) :=
-  do (n, s) <- (expect 0 4 s);
+  do (n, s) <- (expect 4 0 s);
   do (reg1, s) <- (register s);
-  do (n, s) <- (expect 15 4 s);
+  do (n, s) <- (expect 4 15 s);
   Some (ast.popl reg1, s).
+
+Fact popl_consumes: consumes (popl).
+Proof.
+  unfold consumes, popl. intros.
+  assert_consumes (expect 4 0 s) H x Hx s s0.
+  consumes expect_consumes H Hx.
+  consumes_trans s0.
+  assert_consumes (register s0) H y Hy s0 s1.
+  consumes register_consumes H Hy.
+  consumes_trans s1.
+  assert_consumes (expect 4 15 s1) H z Hz s1 s2.
+  consumes expect_consumes H Hz.
+  injection H. intros. subst. assumption.
+Qed.
 
 Definition instruction (s: stream) : option (ast.instruction * stream) :=
   do (n, s) <- (number 4 s);
   match n with
-  | 0%N => do (_, s) <- (expect 0 4 s);
+  | 0%N => do (_, s) <- (expect 4 0 s);
            Some (ast.halt, s)
-  | 1%N => do (_, s) <- (expect 0 4 s);
+  | 1%N => do (_, s) <- (expect 4 0 s);
            Some (ast.nop, s)
   | 2%N => rrmovl s
   | 3%N => irmovl s
@@ -246,24 +455,36 @@ Definition instruction (s: stream) : option (ast.instruction * stream) :=
   | 5%N => mrmovl s
   | 6%N => OPl s
   | 7%N => jump s
-  | 8%N => rrmovl s
+  | 8%N => call s
   | 9%N => ret s
   | 10%N => pushl s
   | 11%N => popl s
   | _ => None
   end.
 
-Lemma instruction_consumes:
-  forall (s s': stream) (i: ast.instruction),
-    instruction s = Some (i, s') ->
-    List.length s' < List.length s.
+Fact instruction_consumes: consumes (instruction).
 Proof.
-  intros.
-  unfold instruction, rrmovl, irmovl, rmmovl, mrmovl,
-  OPl, jump, rrmovl, ret, pushl, popl, register,
-  expect, immediate, displacement, destination in H.
-  case_eq (number 4 s); intros; rewrite H0 in H.
-Admitted.
+  unfold instruction, consumes. intros.
+  assert_consumes (number 4 s) H n Hn s s0.
+  number_consumes H Hn.
+  consumes_trans s0.
+  destruct n;
+    do 4 try destruct p;
+    try discriminate;
+    try (assert_consumes (expect 4 0 s0) H x Hx s0 s1;
+         consumes expect_consumes H Hx;
+         injection H; intros; subst; assumption).
+  consumes popl_consumes H H.
+  consumes jump_consumes H H.
+  consumes ret_consumes H H.
+  consumes mrmovl_consumes H H.
+  consumes irmovl_consumes H H.
+  consumes pushl_consumes H H.
+  consumes OPl_consumes H H.
+  consumes call_consumes H H.
+  consumes rmmovl_consumes H H.
+  consumes rrmovl_consumes H H.
+Qed.
 
 Require Coq.Program.Wf.
 Program Fixpoint _instructions_rec
@@ -277,15 +498,9 @@ Program Fixpoint _instructions_rec
     end
   end.
 Next Obligation.
-  apply
-
-(*Fixpoint _get_instructions_rec (bits: stream) (acc: instructions): option (instructions) :=
-  match bits with
-  | nil => Some acc
-  | bits => match decode bits with
-    | None => None
-    | Some (instr, s) => _get_instructions_rec s (cons instr acc)
-    end
-  end.*)
+  symmetry in Heq_anonymous.
+  eapply instruction_consumes with (r:=instr).
+  assumption.
+Qed.
 
 Definition instructions (bits: stream): option (ast.instructions) := _instructions_rec bits nil.
