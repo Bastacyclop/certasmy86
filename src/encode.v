@@ -4,47 +4,41 @@ Require Import Lists.List.
 Import ListNotations.
 
 Require ast.
+Require stream.
+Import stream.BitNotations.
 
-Fixpoint number_rec
-         (n: N) (bits: nat) (acc: list bool): list bool :=
-  match bits with
-  | 0 => acc
-  | S b => number_rec
-             (N.shiftr n 1) b (cons (N.testbit n 0) acc)
-  end.
+Definition stream := stream.bit.
 
 (* Encodes a number into binary (little endian) *)
-Definition number (bits: nat) (n: N): list bool :=
-  number_rec n bits nil.
+Fixpoint number
+         (bits: nat) (n: N) (s: stream): stream :=
+  match bits with
+  | 0 => s
+  | S b => number b n (stream.put (N.testbit n (N.of_nat b)) s)
+  end.
 
-Lemma number_rec_bits:
-  forall (bits: nat) (n: N) (acc: list bool),
-    List.length (number_rec n bits acc)
-    = (List.length acc) + bits.
+Lemma number_length:
+  forall (bits: nat) (n: N) (s: stream),
+    stream.length (number bits n s) = (stream.length s) + bits.
 Proof.
   induction bits; intros.
   - trivial.
   - simpl.
-    rewrite <- plus_n_Sm.
-    apply IHbits.
+    rewrite IHbits.
+    rewrite stream.put_length.
+    omega.
 Qed.
 
-Lemma number_bits: forall (n: N)(bits: nat),
-    List.length (number bits n) = bits.
-Proof.
-  intros.
-  unfold number. simpl. rewrite number_rec_bits.
-  compute. trivial.
-Qed.
 
-Notation "'b[' n ';' b ']'" := (number b n) (at level 60).
+Definition is_number_output (bits: nat) (n: N) :=
+  stream.puts (number bits n).
 
-Goal b[0; 4] = [false; false; false; false].
-Proof. trivial. Qed.
-Goal b[5; 4] = [false; true; false; true].
-Proof. trivial. Qed.
-Goal b[15; 4] = [true; true; true; true].
-Proof. trivial. Qed.
+Goal is_number_output 4 0 [0; 0; 0; 0]%bit.
+Proof. compute. reflexivity. Qed.
+Goal is_number_output 4 5 [0; 1; 0; 1]%bit.
+Proof. compute. reflexivity. Qed.
+Goal is_number_output 4 15 [1; 1; 1; 1]%bit.
+Proof. compute. reflexivity. Qed.
 
 Definition operator_num (op: ast.operator): N :=
   match op with
@@ -58,8 +52,8 @@ Fact operator_4bits (op: ast.operator):
   (N.size_nat (operator_num op)) <= 4.
 Proof. case op; compute; omega. Qed.
 
-Definition operator (op: ast.operator): list bool :=
-  (number 4 (operator_num op)).
+Definition operator (op: ast.operator) (s: stream): stream :=
+  (number 4 (operator_num op) s).
 
 Definition condition_num (cond: ast.condition): N :=
   match cond with
@@ -76,60 +70,64 @@ Fact condition_4bits (cond: ast.condition):
   N.size_nat (condition_num cond) <= 4.
 Proof. case cond; compute; omega. Qed.
 
-Definition condition (cond: ast.condition): list bool :=
-  (number 4 (condition_num cond)).
+Definition condition (cond: ast.condition) (s: stream): stream :=
+  (number 4 (condition_num cond) s).
 
-Definition register (r: ast.register): list bool :=
+Definition register (r: ast.register) (s: stream): stream :=
   match r with
-  | ast.reg n => (number ast.register_bits n)
+  | ast.reg n => (number ast.register_bits n s)
   end.
 
-Definition immediate (i: ast.immediate): list bool :=
+Definition immediate (i: ast.immediate) (s: stream): stream :=
   match i with
-  | ast.imm n => (number ast.constant_bits n)
+  | ast.imm n => (number ast.constant_bits n s)
   end.
 
-Definition displacement (d: ast.displacement): list bool :=
+Definition displacement (d: ast.displacement) (s: stream): stream :=
   match d with
-  | ast.dsp n => (number ast.constant_bits n)
+  | ast.dsp n => (number ast.constant_bits n s)
   end.
 
-Definition destination (d: ast.destination): list bool :=
+Definition destination (d: ast.destination) (s: stream): stream :=
   match d with
-  | ast.dst n => (number ast.constant_bits n)
+  | ast.dst n => (number ast.constant_bits n s)
   end.
 
-Definition instruction (i: ast.instruction): list bool :=
+Notation "v '|>' f" := (f v)
+                         (at level 50, left associativity).
+
+Definition instruction (i: ast.instruction) (s: stream): stream :=
   match i with
-  | ast.halt => b[0; 4] ++ b[0; 4]
-  | ast.nop => b[1; 4] ++ b[0; 4]
+  | ast.halt => s |> number 4 0 |> number 4 0
+  | ast.nop => s |> number 4 1 |> number 4 0
   | ast.rrmovl cond ra rb =>
-    b[2; 4] ++ (condition cond) ++ (register ra) ++ (register rb)
+    s |> number 4 2 |> condition cond |> register ra |> register rb
   | ast.irmovl v rb =>
-    b[3; 4] ++ b[0; 4] ++ b[15; 4] ++ (register rb) ++ (immediate v)
+    s |> number 4 3 |> number 4 0 |> number 4 15 |> register rb |> immediate v
   | ast.rmmovl ra d rb =>
-    b[4; 4] ++ b[0; 4] ++ (register ra) ++ (register rb) ++ (displacement d)
+    s |> number 4 4 |> number 4 0 |> register ra |> register rb |> displacement d
   | ast.mrmovl d ra rb =>
-    b[5; 4] ++ b[0; 4] ++ (register ra) ++ (register rb) ++ (displacement d)
+    s |> number 4 5 |> number 4 0 |> register ra |> register rb |> displacement d
   | ast.OPl op ra rb =>
-    b[6; 4] ++ (operator op) ++ (register ra) ++ (register rb)
+    s |> number 4 6 |> operator op |> register ra |> register rb
   | ast.jump cond d =>
-    b[7; 4] ++ (condition cond) ++ (destination d)
+    s |> number 4 7 |> number 4 7 |> condition cond |> destination d
   | ast.call d =>
-    b[8; 4] ++ b[0; 4] ++ (destination d)
-  | ast.ret => b[9; 4] ++ b[0; 4]
+    s |> number 4 8 |> number 4 0 |> destination d
+  | ast.ret => s |> number 4 9 |> number 4 0
   | ast.pushl ra =>
-    b[10; 4] ++ b[0; 4] ++ (register ra) ++ b[15; 4]
+    s |> number 4 10 |> number 4 0 |> register ra |> number 4 15
   | ast.popl ra =>
-    b[11; 4] ++ b[0; 4] ++ (register ra) ++ b[15; 4]
+    s |> number 4 11 |> number 4 0 |> register ra |> number 4 15
   end.
 
-Fixpoint instructions_rev (ins: ast.instructions): list bool :=
+Goal stream.puts (instruction ast.nop)
+      [0; 0; 0; 1; 0; 0; 0; 0]%bit.
+Proof. compute. reflexivity. Qed.
+
+Fixpoint instructions
+         (ins: ast.instructions) (s: stream): stream :=
   match ins with
-  | cons i ins => List.rev_append (instruction i)
-                                  (instructions_rev ins)
-  | nil => nil
+  | cons i ins => instructions ins (instruction i s)
+  | nil => s
   end.
-
-Definition instructions (ins: ast.instructions): list bool :=
-  List.rev (instructions_rev ins).

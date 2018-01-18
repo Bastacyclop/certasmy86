@@ -4,6 +4,9 @@ Require Import Lists.List.
 Import ListNotations.
 
 Require ast.
+Require stream.
+
+Definition stream := stream.bit.
 
 (* Helpers *)
 
@@ -11,44 +14,51 @@ Notation "'do' '(' a ',' b ')' '<-' e ';' c" :=
   (match e with | None => None | Some (a, b) => c end)
     (at level 70, right associativity).
 
-Definition stream := list bool.
-
 Fixpoint number_rec (bits: nat) (s: stream) (acc: N):
   option (N * stream) :=
-  match bits, s with
-  | 0, _ => Some (acc, s)
-  | _, nil => None
-  | (S bits), (cons bit s) =>
-    number_rec bits s
-               (N.lor acc (N.shiftl (N.b2n bit) (N.of_nat bits)))
+  match bits with
+  | 0 => Some (acc, s)
+  | S bits =>
+    do (bit, s) <- stream.take s;
+      number_rec bits s
+        (N.lor acc (N.shiftl (N.b2n bit) (N.of_nat bits)))
   end.
 
 Lemma number_rec_some:
   forall (bits: nat) (s: stream) (acc: N),
-    (List.length s >= bits) ->
+    (stream.length s >= bits) ->
     exists (r: N * stream),
       (number_rec bits s acc) = Some r.
 Proof.
   induction bits; intros.
   - exists (acc, s). trivial.
-  - simpl. case_eq s; intros; subst.
-    + contradict H. simpl. omega.
-    + apply IHbits.
-      simpl in H.
+  - simpl. case_eq (stream.take s); intros; subst.
+    + destruct p.
+      apply IHbits.
+      assert (stream.length s = S (stream.length t)).
+      eapply stream.take_some_length.
+      eassumption.
+      omega.
+    + contradict H.
+      apply stream.take_none_length in H0.
       omega.
 Qed.
 
-Lemma number_rec_skipn:
+Lemma number_rec_length:
   forall (bits: nat) (s: stream) (acc: N) (n: N) (s': stream),
     (number_rec bits s acc) = Some (n, s') ->
-    s' = skipn bits s.
+    stream.length s = bits + stream.length s'.
 Proof.
   induction bits; intros.
-  - compute in H. injection H.
-    intros. simpl. rewrite H0. reflexivity.
-  - destruct s; simpl in H.
-    + contradict H. discriminate.
-    + apply IHbits in H. simpl. assumption.
+  - compute in H. injection H; intros. subst.
+    omega.
+  - unfold number_rec in H.
+    case_eq (stream.take s); intros; rewrite H0 in H.
+    + destruct p. fold number_rec in H.
+      apply IHbits in H.
+      apply stream.take_some_length in H0.
+      omega.
+    + discriminate.
 Qed.
 
 Lemma size_lor: forall(a b: N)(s: nat),
@@ -63,13 +73,13 @@ Lemma number_rec_bits_acc:
     (N.size_nat n <= bits + N.size_nat acc).
 Proof.
   induction bits; intros.
-  - compute in H. injection H. intros.
-    rewrite H1. omega.
-  - destruct s; simpl in H.
-    + discriminate.
-    + pose (complik := (N.lor acc (N.shiftl (N.b2n b) (N.of_nat bits)))).
-      specialize IHbits with (s) (complik) (n) (s').
-      apply IHbits in H.
+  - compute in H. injection H. intros. subst. omega.
+  - unfold number_rec in H.
+    case_eq (stream.take s); intros; rewrite H0 in H.
+    + destruct p.
+      fold number_rec in H.
+      pose (complik := (N.lor acc (N.shiftl (N.b2n b) (N.of_nat bits)))).
+      eapply IHbits in H.
       apply Nat.le_trans with (m:=bits + N.size_nat complik).
       assumption.
       simpl. rewrite plus_n_Sm.
@@ -77,6 +87,7 @@ Proof.
       unfold complik. unfold complik in H.
       apply size_lor; try omega.
       destruct b; subst. simpl; simpl in H.
+      admit.
 Admitted.
 
 Lemma number_rec_bits:
@@ -109,23 +120,16 @@ Qed.
 Definition consumes {R} (f: stream -> option (R * stream)) :=
   forall (s s': stream)(r: R),
     f s = Some (r, s') ->
-    List.length s' < List.length s.
+    stream.length s' < stream.length s.
 
 Lemma number_consumes:
   forall (bits: nat), consumes (number (S bits)).
 Proof.
   unfold number, consumes. intros.
-  specialize number_rec_skipn with ((S bits))(s)(0%N)(r)(s').
-  intros.
-  assert (s' = skipn (S bits) s). {
-    apply H0. apply H.
-  }
-  subst.
-  induction s.
-  - contradict H. simpl. discriminate.
-  - simpl.
-    apply le_lt_n_Sm.
-    apply skipn_length.
+  assert (stream.length s = (S bits) + stream.length s').
+  eapply number_rec_length.
+  eassumption.
+  omega.
 Qed.
 
 Definition expect (bits: nat) (expected: N) (s: stream):
@@ -231,9 +235,9 @@ Definition rrmovl (s: stream): option (ast.instruction * stream) :=
 
 Ltac assert_consumes e H n HR s s' :=
   mcase e H n HR;
-  assert (length s' < length s).
+  assert (stream.length s' < stream.length s).
 Ltac consumes_trans s' :=
-  apply lt_trans with (length s'); try assumption.
+  apply lt_trans with (stream.length s'); try assumption.
 
 Fact rrmovl_consumes: consumes (rrmovl).
 Proof.
@@ -487,20 +491,17 @@ Proof.
 Qed.
 
 Require Coq.Program.Wf.
-Program Fixpoint _instructions_rec
+Program Fixpoint instructions_rec
         (s: stream) (acc: ast.instructions)
-        {measure (List.length s)}: option (ast.instructions) :=
-  match s with
-  | nil => Some acc
-  | s => match instruction s with
-    | None => None
-    | Some (instr, s) => _instructions_rec s (cons instr acc)
-    end
-  end.
+        {measure (stream.length s)}: option (ast.instructions) :=
+  if stream.is_finished s then Some acc
+  else do (i, s) <- instruction s;
+       instructions_rec s (cons i acc).
 Next Obligation.
   symmetry in Heq_anonymous.
-  eapply instruction_consumes with (r:=instr).
+  eapply instruction_consumes with (r:=i).
   assumption.
 Qed.
 
-Definition instructions (bits: stream): option (ast.instructions) := _instructions_rec bits nil.
+Definition instructions (s: stream): option (ast.instructions) :=
+  instructions_rec s nil.
