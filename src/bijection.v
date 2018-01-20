@@ -84,17 +84,24 @@ Proof.
   plain_number_encdec.
 Qed.
 
+Ltac number_encdec := rewrite number_encdec; try (simpl; omega).
+
 Fact condition_encdec: forall (c: ast.condition) (s: stream.bit),
     decode.condition (encode.condition c s) = Some (c, s).
 Proof.
-Admitted.
+  unfold decode.condition, encode.condition, encode.condition_num.
+  intros.
+  destruct c; number_encdec; reflexivity.
+Qed.
 
 Fact operator_encdec: forall (op: ast.operator) (s: stream.bit),
     decode.operator (encode.operator op s) = Some (op, s).
 Proof.
-Admitted.
+  unfold decode.operator, encode.operator, encode.operator_num.
+  intros.
+  destruct op; number_encdec; reflexivity.
+Qed.
 
-Ltac number_encdec := rewrite number_encdec; try (simpl; omega).
 Ltac expect_encdec :=
   unfold decode.expect; number_encdec; rewrite N.eqb_refl.
 
@@ -224,14 +231,24 @@ Fact condition_decenc:
     decode.condition s = Some (c, s') ->
     encode.condition c s' = s.
 Proof.
-Admitted.
+  unfold decode.condition, encode.condition, encode.condition_num.
+  intros.
+  mcase (decode.number 4 s) H p C0.
+  destruct n; do 3 try destruct p; try discriminate;
+    try (injection H; intros; subst; apply number_decenc; assumption).
+Qed.
 
 Fact operator_decenc:
   forall (c: ast.operator) (s s': stream.bit),
     decode.operator s = Some (c, s') ->
     encode.operator c s' = s.
 Proof.
-Admitted.
+  unfold decode.operator, encode.operator, encode.operator_num.
+  intros.
+  mcase (decode.number 4 s) H p C0.
+  destruct n; do 2 try destruct p; try discriminate;
+    try (injection H; intros; subst; apply number_decenc; assumption).
+Qed.
 
 Fact decode_expect:
   forall (bits: nat) (e: N) (u: unit) (s s': stream.bit),
