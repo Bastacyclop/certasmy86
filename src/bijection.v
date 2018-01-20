@@ -1,21 +1,8 @@
-Require Import Coq.Arith.Arith.
-Require Import Coq.omega.Omega.
-Require Import Lists.List.
-Import ListNotations.
-
+Require Import util.
 Require ast.
 Require stream.
 Require encode.
 Require decode.
-
-Ltac mcase e H p HR :=
-  case_eq e; try intros p HR; try intros HR; rewrite HR in H;
-  try destruct p; try discriminate.
-
-Fact positive_size_lt0: forall (p: positive), Pos.size_nat p > 0.
-Proof.
-  induction p; simpl; omega.
-Qed.
 
 Lemma number_encdec:
   forall (bits: nat) (n: N) (s: stream.bit),

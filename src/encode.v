@@ -1,8 +1,5 @@
-Require Import Coq.Arith.Arith.
-Require Import Coq.omega.Omega.
-Require Import Lists.List.
+Require Import util.
 Import ListNotations.
-
 Require ast.
 Require stream.
 Import stream.BitNotations.

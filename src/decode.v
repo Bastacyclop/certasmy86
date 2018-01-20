@@ -1,8 +1,5 @@
-Require Import Coq.Arith.Arith.
-Require Import Coq.omega.Omega.
-Require Import Lists.List.
+Require Import util.
 Import ListNotations.
-
 Require ast.
 Require stream.
 
@@ -13,10 +10,6 @@ Definition stream := stream.bit.
 Notation "'do' '(' a ',' b ')' '<-' e ';' c" :=
   (match e with | None => None | Some (a, b) => c end)
     (at level 70, right associativity).
-
-Ltac mcase e H p HR :=
-  case_eq e; try intros p HR; try intros HR; rewrite HR in H;
-  try destruct p; try discriminate.
 
 Fixpoint number (bits: nat) (s: stream): option (N * stream) :=
   match bits with
@@ -65,11 +58,6 @@ Proof.
     apply IHbits with (n:=n0).
     assumption.
 Qed.
-
-Fact setbit_bits: forall (n: N)(b: nat),
-    b >= N.size_nat n ->
-    N.size_nat (N.setbit n (N.of_nat b)) = S b.
-Proof. Admitted.
 
 Lemma number_bits:
   forall (bits: nat) (s: stream) (s': stream) (n: N),

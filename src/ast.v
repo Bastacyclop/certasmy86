@@ -1,5 +1,4 @@
-Require Import Coq.Arith.Arith.
-Require Import Coq.omega.Omega.
+Require Import util.
 
 Definition constant_bits := 32.
 Definition register_bits := 4.

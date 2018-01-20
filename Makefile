@@ -1,6 +1,6 @@
 SRC_DIR = src
 BUILD_DIR = $(SRC_DIR)
-SOURCE_FILES := stream.v ast.v encode.v decode.v bijection.v
+SOURCE_FILES := util.v stream.v ast.v encode.v decode.v bijection.v
 BINARY_FILES := $(patsubst %.v,$(BUILD_DIR)/%.vo,$(SOURCE_FILES))
 SOURCE_FILES := $(patsubst %,$(SRC_DIR)/%,$(SOURCE_FILES))
 
