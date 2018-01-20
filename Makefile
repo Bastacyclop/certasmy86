@@ -14,4 +14,4 @@ $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
 clean:
-	@rm src/*.vo src/*.aux src/*.glob 2>/dev/null || true
+	@rm src/*.vo src/*.aux src/.*.aux src/*.glob 2>/dev/null || true

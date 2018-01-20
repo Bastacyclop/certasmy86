@@ -45,6 +45,15 @@ Proof.
   - injection H. intros. subst. reflexivity.
 Qed.
 
+Lemma take_eq: forall (A: Type) (s s': t A),
+    take s = take s' -> s = s'.
+Proof.
+  unfold take. intros.
+  destruct s, s', l, l0; try discriminate.
+  - reflexivity.
+  - injection H; intros. subst. reflexivity.
+Qed.
+
 Definition put {A} (v: A) (s: t A): t A :=
   match s with
   | stream _ l => stream _ (cons v l)

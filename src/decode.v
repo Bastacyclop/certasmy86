@@ -14,98 +14,78 @@ Notation "'do' '(' a ',' b ')' '<-' e ';' c" :=
   (match e with | None => None | Some (a, b) => c end)
     (at level 70, right associativity).
 
-Fixpoint number_rec (bits: nat) (s: stream) (acc: N):
-  option (N * stream) :=
+Ltac mcase e H p HR :=
+  case_eq e; try intros p HR; try intros HR; rewrite HR in H;
+  try destruct p; try discriminate.
+
+Fixpoint number (bits: nat) (s: stream): option (N * stream) :=
   match bits with
-  | 0 => Some (acc, s)
-  | S bits =>
+  | 0 => Some (0%N, s)
+  | S b =>
     do (bit, s) <- stream.take s;
-      number_rec bits s
-        (N.lor acc (N.shiftl (N.b2n bit) (N.of_nat bits)))
+    do (n, s) <- number b s;
+    Some (if bit then N.setbit n (N.of_nat b) else n, s)
   end.
 
-Lemma number_rec_some:
-  forall (bits: nat) (s: stream) (acc: N),
+Lemma number_some:
+  forall (bits: nat) (s: stream),
     (stream.length s >= bits) ->
     exists (r: N * stream),
-      (number_rec bits s acc) = Some r.
+      (number bits s) = Some r.
 Proof.
   induction bits; intros.
-  - exists (acc, s). trivial.
-  - simpl. case_eq (stream.take s); intros; subst.
+  - exists (0%N, s). trivial.
+  - simpl.
+    case_eq (stream.take s); intros; subst.
     + destruct p.
-      apply IHbits.
-      assert (stream.length s = S (stream.length t)).
-      eapply stream.take_some_length.
-      eassumption.
+      destruct IHbits with t.
+      apply stream.take_some_length in H0.
       omega.
-    + contradict H.
-      apply stream.take_none_length in H0.
-      omega.
+      rewrite H1. destruct x.
+      eexists. reflexivity.
+    + apply stream.take_none_length in H0.
+      contradict H0. omega.
 Qed.
 
-Lemma number_rec_length:
-  forall (bits: nat) (s: stream) (acc: N) (n: N) (s': stream),
-    (number_rec bits s acc) = Some (n, s') ->
+Lemma number_length:
+  forall (bits: nat) (s: stream) (n: N) (s': stream),
+    (number bits s) = Some (n, s') ->
     stream.length s = bits + stream.length s'.
 Proof.
   induction bits; intros.
   - compute in H. injection H; intros. subst.
     omega.
-  - unfold number_rec in H.
-    case_eq (stream.take s); intros; rewrite H0 in H.
-    + destruct p. fold number_rec in H.
-      apply IHbits in H.
-      apply stream.take_some_length in H0.
-      omega.
-    + discriminate.
+  - unfold number in H.
+    mcase (stream.take s) H p H0.
+    fold number in H.
+    mcase (number bits t) H p H1.
+    apply stream.take_some_length in H0.
+    rewrite H0. simpl. apply f_equal.
+    injection H. intros. subst.
+    apply IHbits with (n:=n0).
+    assumption.
 Qed.
 
-Lemma size_lor: forall(a b: N)(s: nat),
-    N.size_nat a <= s ->
-    N.size_nat b <= s ->
-    N.size_nat (N.lor a b) <= s.
+Fact setbit_bits: forall (n: N)(b: nat),
+    b >= N.size_nat n ->
+    N.size_nat (N.setbit n (N.of_nat b)) = S b.
 Proof. Admitted.
 
-Lemma number_rec_bits_acc:
-  forall (bits: nat) (s: stream) (acc: N) (n: N) (s': stream),
-    (number_rec bits s acc) = Some (n, s') ->
-    (N.size_nat n <= bits + N.size_nat acc).
-Proof.
-  induction bits; intros.
-  - compute in H. injection H. intros. subst. omega.
-  - unfold number_rec in H.
-    case_eq (stream.take s); intros; rewrite H0 in H.
-    + destruct p.
-      fold number_rec in H.
-      pose (complik := (N.lor acc (N.shiftl (N.b2n b) (N.of_nat bits)))).
-      eapply IHbits in H.
-      apply Nat.le_trans with (m:=bits + N.size_nat complik).
-      assumption.
-      simpl. rewrite plus_n_Sm.
-      apply plus_le_compat_l.
-      unfold complik. unfold complik in H.
-      apply size_lor; try omega.
-      destruct b; subst. simpl; simpl in H.
-      admit.
-Admitted.
-
-Lemma number_rec_bits:
+Lemma number_bits:
   forall (bits: nat) (s: stream) (s': stream) (n: N),
-    (number_rec bits s 0) = Some (n, s') ->
+    (number bits s) = Some (n, s') ->
     (N.size_nat n <= bits).
 Proof.
-  intros.
-  specialize number_rec_bits_acc with (bits)(s)(0%N)(n)(s').
-  intros.
-  apply H0 in H.
-  rewrite Nat.add_comm in H.
-  simpl in H.
-  assumption.
+  induction bits; intros; simpl in H.
+  - injection H. intros. subst. simpl. omega.
+  - mcase (stream.take s) H p H0.
+    mcase (number bits t) H p H1.
+    injection H. intros. subst.
+    destruct b;
+      try (apply Nat.eq_le_incl; apply setbit_bits);
+    assert (N.size_nat n0 <= bits); try omega;
+    apply IHbits with (s:=t)(s':=s'); assumption.
 Qed.
-
-Definition number (bits: nat) (s: stream):
-  option (N * stream) := (number_rec bits s 0).
 
 Lemma skipn_length {A}: forall (n: nat)(l: list A),
     List.length (List.skipn n l) <= List.length l.
@@ -127,7 +107,7 @@ Lemma number_consumes:
 Proof.
   unfold number, consumes. intros.
   assert (stream.length s = (S bits) + stream.length s').
-  eapply number_rec_length.
+  eapply number_length.
   eassumption.
   omega.
 Qed.
@@ -139,9 +119,6 @@ Definition expect (bits: nat) (expected: N) (s: stream):
     then Some (tt, s)
     else None.
 
-Ltac mcase e H p HR :=
-  case_eq e; try intros p HR; try intros HR; rewrite HR in H;
-  try destruct p; try discriminate.
 Ltac consumes fact I H :=
   try (injection I; intros; subst);
   eapply fact; apply H.
@@ -254,8 +231,8 @@ Proof.
 Qed.
 
 Definition irmovl (s: stream): option (ast.instruction * stream) :=
-  (* 15 is 0x0F, it's required by the spec *)
-  do (n, s) <- (expect 8 15 s);
+  do (n, s) <- (expect 4 0 s);
+  do (n, s) <- (expect 4 15 s);
   do (reg1, s) <- (register s);
   do (val, s) <- (immediate s);
   Some (ast.irmovl val reg1, s).
@@ -263,14 +240,17 @@ Definition irmovl (s: stream): option (ast.instruction * stream) :=
 Fact irmovl_consumes: consumes (irmovl).
 Proof.
   unfold consumes, irmovl. intros.
-  assert_consumes (expect 8 15 s) H x Hx s s0.
-  consumes expect_consumes H Hx.
+  assert_consumes (expect 4 0 s) H x C0 s s0.
+  consumes expect_consumes H C0.
   consumes_trans s0.
-  assert_consumes (register s0) H y Hy s0 s1.
-  consumes register_consumes H Hy.
+  assert_consumes (expect 4 15 s0) H x C1 s0 s1.
+  consumes expect_consumes H C1.
   consumes_trans s1.
-  assert_consumes (immediate s1) H z Hz s1 s2.
-  consumes immediate_consumes H Hz.
+  assert_consumes (register s1) H x C2 s1 s2.
+  consumes register_consumes H C2.
+  consumes_trans s2.
+  assert_consumes (immediate s2) H x C3 s2 s3.
+  consumes immediate_consumes H C3.
   injection H. intros. subst. assumption.
 Qed.
 
@@ -322,7 +302,7 @@ Proof.
   injection H. intros. subst. assumption.
 Qed.
 
-Definition op (s: stream): option (ast.operator * stream) :=
+Definition operator (s: stream): option (ast.operator * stream) :=
   do (n, s) <- (number 4 s);
   match n with
   | 0%N => Some (ast.addl, s)
@@ -332,9 +312,9 @@ Definition op (s: stream): option (ast.operator * stream) :=
   | _ => None
   end.
 
-Fact op_consumes: consumes (op).
+Fact operator_consumes: consumes (operator).
 Proof.
-  unfold op, consumes. intros.
+  unfold operator, consumes. intros.
   mcase (number 4 s) H p H0.
   destruct n;
     do 3 try destruct p;
@@ -343,7 +323,7 @@ Proof.
 Qed.
 
 Definition OPl (s: stream): option (ast.instruction * stream) :=
-  do (op, s) <- (op s);
+  do (op, s) <- (operator s);
   do (reg1, s) <- (register s);
   do (reg2, s) <- (register s);
   Some (ast.OPl op reg1 reg2, s).
@@ -351,8 +331,8 @@ Definition OPl (s: stream): option (ast.instruction * stream) :=
 Fact OPl_consumes: consumes (OPl).
 Proof.
   unfold consumes, OPl. intros.
-  assert_consumes (op s) H x Hx s s0.
-  consumes op_consumes H Hx.
+  assert_consumes (operator s) H x Hx s s0.
+  consumes operator_consumes H Hx.
   consumes_trans s0.
   assert_consumes (register s0) H y Hy s0 s1.
   consumes register_consumes H Hy.

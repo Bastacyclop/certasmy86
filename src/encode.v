@@ -14,7 +14,7 @@ Fixpoint number
          (bits: nat) (n: N) (s: stream): stream :=
   match bits with
   | 0 => s
-  | S b => number b n (stream.put (N.testbit n (N.of_nat b)) s)
+  | S b => number b (N.shiftr n 1) (stream.put (N.testbit n 0) s)
   end.
 
 Lemma number_length:
@@ -30,14 +30,14 @@ Proof.
 Qed.
 
 
-Definition is_number_output (bits: nat) (n: N) :=
+Definition number_puts (bits: nat) (n: N) :=
   stream.puts (number bits n).
 
-Goal is_number_output 4 0 [0; 0; 0; 0]%bit.
+Goal number_puts 4 0 [0; 0; 0; 0]%bit.
 Proof. compute. reflexivity. Qed.
-Goal is_number_output 4 5 [0; 1; 0; 1]%bit.
+Goal number_puts 4 5 [1; 0; 1; 0]%bit.
 Proof. compute. reflexivity. Qed.
-Goal is_number_output 4 15 [1; 1; 1; 1]%bit.
+Goal number_puts 4 15 [1; 1; 1; 1]%bit.
 Proof. compute. reflexivity. Qed.
 
 Definition operator_num (op: ast.operator): N :=
@@ -93,36 +93,46 @@ Definition destination (d: ast.destination) (s: stream): stream :=
   | ast.dst n => (number ast.constant_bits n s)
   end.
 
-Notation "v '|>' f" := (f v)
-                         (at level 50, left associativity).
+Notation "f '>>' v" := (f v)
+                         (at level 60, right associativity).
 
 Definition instruction (i: ast.instruction) (s: stream): stream :=
   match i with
-  | ast.halt => s |> number 4 0 |> number 4 0
-  | ast.nop => s |> number 4 1 |> number 4 0
+  | ast.halt => number 4 0 >> number 4 0 >> s
+  | ast.nop => number 4 1 >> number 4 0 >> s
   | ast.rrmovl cond ra rb =>
-    s |> number 4 2 |> condition cond |> register ra |> register rb
+    number 4 2 >> condition cond >>
+           register ra >> register rb >> s
   | ast.irmovl v rb =>
-    s |> number 4 3 |> number 4 0 |> number 4 15 |> register rb |> immediate v
+    number 4 3 >> number 4 0 >>
+           number 4 15 >> register rb >>
+           immediate v >> s
   | ast.rmmovl ra d rb =>
-    s |> number 4 4 |> number 4 0 |> register ra |> register rb |> displacement d
+    number 4 4 >> number 4 0 >>
+           register ra >> register rb >>
+           displacement d >> s
   | ast.mrmovl d ra rb =>
-    s |> number 4 5 |> number 4 0 |> register ra |> register rb |> displacement d
+    number 4 5 >> number 4 0 >>
+           register ra >> register rb >>
+           displacement d >> s
   | ast.OPl op ra rb =>
-    s |> number 4 6 |> operator op |> register ra |> register rb
+    number 4 6 >> operator op >>
+           register ra >> register rb >> s
   | ast.jump cond d =>
-    s |> number 4 7 |> number 4 7 |> condition cond |> destination d
+    number 4 7 >> condition cond >> destination d >> s
   | ast.call d =>
-    s |> number 4 8 |> number 4 0 |> destination d
-  | ast.ret => s |> number 4 9 |> number 4 0
+    number 4 8 >> number 4 0 >> destination d >> s
+  | ast.ret => number 4 9 >> number 4 0 >> s
   | ast.pushl ra =>
-    s |> number 4 10 |> number 4 0 |> register ra |> number 4 15
+    number 4 10 >> number 4 0 >>
+           register ra >> number 4 15 >> s
   | ast.popl ra =>
-    s |> number 4 11 |> number 4 0 |> register ra |> number 4 15
+    number 4 11 >> number 4 0 >>
+           register ra >> number 4 15 >> s
   end.
 
 Goal stream.puts (instruction ast.nop)
-      [0; 0; 0; 1; 0; 0; 0; 0]%bit.
+      [0; 0; 0; 0; 1; 0; 0; 0]%bit.
 Proof. compute. reflexivity. Qed.
 
 Fixpoint instructions
