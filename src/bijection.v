@@ -42,27 +42,6 @@ Proof.
     admit.
 Admitted.
 
-Ltac number_encdec := rewrite number_encdec; try (simpl; omega).
-
-Fact decode_expect:
-  forall (bits: nat) (e: N) (s s': stream.bit),
-    decode.expect bits e s = Some (tt, s') <->
-    decode.number bits s = Some (e, s').
-Proof.
-  unfold decode.expect.
-  split; intros.
-  - mcase (decode.number bits s) H p H0.
-    mcase (n =? e)%N H p H1.
-    injection H. intros. subst.
-    apply Neqb_ok in H1. rewrite H1.
-    reflexivity.
-  - rewrite H. rewrite N.eqb_refl.
-    reflexivity.
-Qed.
-
-Ltac expect_encdec :=
-  unfold decode.expect; number_encdec; rewrite N.eqb_refl.
-
 Ltac plain_number_encdec :=
   intros;
   rewrite number_encdec;
@@ -115,16 +94,9 @@ Fact operator_encdec: forall (op: ast.operator) (s: stream.bit),
 Proof.
 Admitted.
 
-Fact register_decenc: forall (n: N) (s s': stream.bit),
-    decode.register s = Some (ast.reg n, s') ->
-    encode.register (ast.reg n) s' = s.
-Proof.
-  unfold encode.register, decode.register.
-  intros.
-  apply number_decenc.
-  mcase (decode.number ast.register_bits s) H p H0.
-  injection H. intros. subst. reflexivity.
-Qed.
+Ltac number_encdec := rewrite number_encdec; try (simpl; omega).
+Ltac expect_encdec :=
+  unfold decode.expect; number_encdec; rewrite N.eqb_refl.
 
 Ltac register_encdec r := destruct r; rewrite register_encdec.
 Ltac immediate_encdec i := destruct i; rewrite immediate_encdec.
@@ -199,3 +171,153 @@ Proof.
     reflexivity.
     admit. (* TODO: limit values *)
 Admitted.
+
+Ltac injected H :=
+  injection H; intros; subst; reflexivity.
+
+Fact register_decenc:
+  forall (r: ast.register) (s s': stream.bit),
+    decode.register s = Some (r, s') ->
+    encode.register r s' = s.
+Proof.
+  unfold encode.register, decode.register.
+  intros. destruct r. apply number_decenc.
+  mcase (decode.number ast.register_bits s) H p H0.
+  injected H.
+Qed.
+
+Fact immediate_decenc:
+  forall (i: ast.immediate) (s s': stream.bit),
+    decode.immediate s = Some (i, s') ->
+    encode.immediate i s' = s.
+Proof.
+  unfold encode.immediate, decode.immediate.
+  intros. destruct i. apply number_decenc.
+  mcase (decode.number ast.constant_bits s) H p H0.
+  injected H.
+Qed.
+
+Fact displacement_decenc:
+  forall (d: ast.displacement) (s s': stream.bit),
+    decode.displacement s = Some (d, s') ->
+    encode.displacement d s' = s.
+Proof.
+  unfold encode.displacement, decode.displacement.
+  intros. destruct d. apply number_decenc.
+  mcase (decode.number ast.constant_bits s) H p H0.
+  injected H.
+Qed.
+
+Fact destination_decenc:
+  forall (d: ast.destination) (s s': stream.bit),
+    decode.destination s = Some (d, s') ->
+    encode.destination d s' = s.
+Proof.
+  unfold encode.destination, decode.destination.
+  intros. destruct d. apply number_decenc.
+  mcase (decode.number ast.constant_bits s) H p H0.
+  injected H.
+Qed.
+
+Fact condition_decenc:
+  forall (c: ast.condition) (s s': stream.bit),
+    decode.condition s = Some (c, s') ->
+    encode.condition c s' = s.
+Proof.
+Admitted.
+
+Fact operator_decenc:
+  forall (c: ast.operator) (s s': stream.bit),
+    decode.operator s = Some (c, s') ->
+    encode.operator c s' = s.
+Proof.
+Admitted.
+
+Fact decode_expect:
+  forall (bits: nat) (e: N) (u: unit) (s s': stream.bit),
+    decode.expect bits e s = Some (u, s') ->
+    decode.number bits s = Some (e, s').
+Proof.
+  unfold decode.expect.
+  intros.
+  mcase (decode.number bits s) H p H0.
+  mcase (n =? e)%N H p H1.
+  injection H. intros. subst.
+  apply Neqb_ok in H1. rewrite H1.
+  reflexivity.
+Qed.
+
+Ltac decenc e H p HR :=
+  mcase e H p HR;
+  try apply decode_expect in HR;
+  try apply register_decenc in HR;
+  try apply immediate_decenc in HR;
+  try apply destination_decenc in HR;
+  try apply displacement_decenc in HR;
+  try apply condition_decenc in HR;
+  try apply operator_decenc in HR;
+  try apply number_decenc in HR.
+
+Lemma instruction_decenc:
+  forall (i: ast.instruction) (s s': stream.bit),
+    decode.instruction s = Some (i, s') ->
+    encode.instruction i s' = s.
+Proof.
+  unfold decode.instruction.
+  intros.
+  decenc (decode.number 4 s) H p C0.
+  destruct n; do 4 try destruct p; try discriminate.
+  - decenc (decode.expect 4 0 s0) H p C1.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.popl in H.
+    decenc (decode.expect 4 0 s0) H p C1.
+    decenc (decode.register s1) H p C2.
+    decenc (decode.expect 4 15 s2) H p C3.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.jump in H.
+    decenc (decode.condition s0) H p C1.
+    decenc (decode.destination s1) H p C2.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.ret in H.
+    decenc (decode.expect 4 0 s0) H p C1.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.mrmovl in H.
+    decenc (decode.expect 4 0 s0) H p C1.
+    decenc (decode.register s1) H p C2.
+    decenc (decode.register s2) H p C3.
+    decenc (decode.displacement s3) H p C4.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.irmovl in H.
+    decenc (decode.expect 4 0 s0) H p C1.
+    decenc (decode.expect 4 15 s1) H p C2.
+    decenc (decode.register s2) H p C3.
+    decenc (decode.immediate s3) H p C4.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.pushl in H.
+    decenc (decode.expect 4 0 s0) H p C1.
+    decenc (decode.register s1) H p C2.
+    decenc (decode.expect 4 15 s2) H p C3.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.OPl in H.
+    decenc (decode.operator s0) H p C1.
+    decenc (decode.register s1) H p C2.
+    decenc (decode.register s2) H p C3.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.call in H.
+    decenc (decode.expect 4 0 s0) H p C1.
+    decenc (decode.destination s1) H p C2.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.rmmovl in H.
+    decenc (decode.expect 4 0 s0) H p C1.
+    decenc (decode.register s1) H p C2.
+    decenc (decode.register s2) H p C3.
+    decenc (decode.displacement s3) H p C4.
+    injection H. intros. subst. reflexivity.
+  - unfold decode.rrmovl in H.
+    decenc (decode.condition s0) H p C1.
+    decenc (decode.register s1) H p C2.
+    decenc (decode.register s2) H p C3.
+    injection H. intros. subst. reflexivity.
+  - decenc (decode.expect 4 0 s0) H p C1.
+    injection H. intros. subst. reflexivity.
+Qed.
