@@ -225,7 +225,7 @@ Definition irmovl (s: stream): option (ast.instruction * stream) :=
   do (n, s) <- (expect 4 15 s);
   do (reg1, s) <- (register s);
   do (val, s) <- (immediate s);
-  Some (ast.irmovl val reg1, s).
+  Some (ast.irmovl reg1 val, s).
 
 Fact irmovl_consumes: consumes (irmovl).
 Proof.

@@ -100,7 +100,7 @@ Definition instruction (i: ast.instruction) (s: stream): stream :=
   | ast.rrmovl cond ra rb =>
     number 4 2 >> condition cond >>
            register ra >> register rb >> s
-  | ast.irmovl v rb =>
+  | ast.irmovl rb v =>
     number 4 3 >> number 4 0 >>
            number 4 15 >> register rb >>
            immediate v >> s
