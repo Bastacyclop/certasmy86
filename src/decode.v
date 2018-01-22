@@ -143,7 +143,9 @@ Proof.
   unfold condition, consumes. intros.
   mcase (number 4 s) H p H0.
   destruct n;
-    do 3 try destruct p;
+    try destruct p;
+    try destruct p;
+    try destruct p;
     try discriminate;
     try number_consumes H H0.
 Qed.
@@ -247,7 +249,7 @@ Definition rmmovl (s: stream): option (ast.instruction * stream) :=
   do (reg1, s) <- (register s);
   do (reg2, s) <- (register s);
   do (val, s) <- (displacement s);
-  Some (ast.rmmovl reg1 val reg2, s).
+  Some (ast.rmmovl reg1 reg2 val, s).
 
 Fact rmmovl_consumes: consumes (rmmovl).
 Proof.
@@ -271,7 +273,7 @@ Definition mrmovl (s: stream): option (ast.instruction * stream) :=
   do (reg1, s) <- (register s);
   do (reg2, s) <- (register s);
   do (val, s) <- (displacement s);
-  Some (ast.mrmovl val reg1 reg2, s).
+  Some (ast.mrmovl reg1 reg2 val, s).
 
 Fact mrmovl_consumes: consumes (mrmovl).
 Proof.
@@ -305,9 +307,9 @@ Proof.
   unfold operator, consumes. intros.
   mcase (number 4 s) H p H0.
   destruct n;
-    do 3 try destruct p;
-    try discriminate;
-    try number_consumes H H0.
+    repeat (try destruct p;
+            try discriminate;
+            try number_consumes H H0).
 Qed.
 
 Definition OPl (s: stream): option (ast.instruction * stream) :=
@@ -441,7 +443,10 @@ Proof.
   number_consumes H Hn.
   consumes_trans s0.
   destruct n;
-    do 4 try destruct p;
+    try destruct p;
+    try destruct p;
+    try destruct p;
+    try destruct p;
     try discriminate;
     try (assert_consumes (expect 4 0 s0) H x Hx s0 s1;
          consumes expect_consumes H Hx;

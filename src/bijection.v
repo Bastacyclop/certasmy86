@@ -97,8 +97,22 @@ Ltac immediate_encdec i := destruct i; rewrite immediate_encdec.
 Ltac displacement_encdec i := destruct i; rewrite displacement_encdec.
 Ltac destination_encdec i := destruct i; rewrite destination_encdec.
 
+Lemma reg_is_4bits: forall (n: nat), n <= ast.nb_registers -> N.size_nat (N.of_nat n) <= ast.register_bits.
+Proof.
+  intros.
+  destruct n.
+    - simpl. omega.
+    - simpl. admit. 
+Admitted.
+
+Lemma imm_is_32bits: forall (n: N), N.le n  4294967295%N -> N.size_nat n <= ast.constant_bits.
+Proof.
+  admit.
+Admitted.
+
 Lemma instruction_encdec:
   forall (i: ast.instruction) (s: stream.bit),
+    ast.valid_instruction i ->
     decode.instruction (encode.instruction i s) = Some (i, s).
 Proof.
   unfold decode.instruction, encode.instruction.
@@ -110,15 +124,26 @@ Proof.
     rewrite condition_encdec.
     register_encdec r.
     register_encdec r0.
-    reflexivity.
-    admit. admit. (* TODO: limit values *)
+    + reflexivity. (* inversion, apply *)
+    + inversion H; try discriminate.
+      injection H2. intros.
+      rewrite H3. apply reg_is_4bits. assumption.
+    + inversion H; try discriminate.
+      injection H2. intros.
+      rewrite H4. apply reg_is_4bits. assumption.
   - unfold decode.irmovl.
     expect_encdec.
     expect_encdec.
     register_encdec r.
     immediate_encdec i.
     reflexivity.
-    admit. admit. (* TODO: limit values *)
+    + inversion H; try discriminate.
+      injection H1. intros. 
+      apply imm_is_32bits.
+      simpl.
+      admit.
+    + admit.
+      
   - unfold decode.rmmovl.
     expect_encdec.
     register_encdec r.

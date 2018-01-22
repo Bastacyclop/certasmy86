@@ -104,11 +104,11 @@ Definition instruction (i: ast.instruction) (s: stream): stream :=
     number 4 3 >> number 4 0 >>
            number 4 15 >> register rb >>
            immediate v >> s
-  | ast.rmmovl ra d rb =>
+  | ast.rmmovl ra rb d =>
     number 4 4 >> number 4 0 >>
            register ra >> register rb >>
            displacement d >> s
-  | ast.mrmovl d ra rb =>
+  | ast.mrmovl ra rb d =>
     number 4 5 >> number 4 0 >>
            register ra >> register rb >>
            displacement d >> s
