@@ -190,12 +190,6 @@ Proof.
   map_number_consumes destination ast.constant_bits s H p H0.
 Qed.
 
-Definition rrmovl (s: stream): option (ast.instruction * stream) :=
-  do (cond, s) <- (condition s);
-  do (reg1, s) <- (register s);
-  do (reg2, s) <- (register s);
-  Some (ast.rrmovl cond reg1 reg2, s).
-
 (* Asserts that e consumes the stream *)
 Ltac assert_consumes e H n HR s s' :=
   mcase e H n HR;
@@ -203,6 +197,36 @@ Ltac assert_consumes e H n HR s s' :=
 (* Use an assumption to progress with transitivity *)
 Ltac consumes_trans s' :=
   apply lt_trans with (stream.length s'); try assumption.
+
+Definition halt (s: stream): option (ast.instruction * stream) :=
+  do (n, s) <- (expect 4 0 s);
+  Some (ast.halt, s).
+
+Fact halt_consumes: consumes (halt).
+Proof.
+  unfold consumes, halt. intros.
+  assert_consumes (expect 4 0 s) H x Hx s s0.
+  consumes expect_consumes H Hx.
+  injection H. intros. subst. assumption.
+Qed.
+
+Definition nop (s: stream): option (ast.instruction * stream) :=
+  do (n, s) <- (expect 4 0 s);
+  Some (ast.nop, s).
+
+Fact nop_consumes: consumes (nop).
+Proof.
+  unfold consumes, nop. intros.
+  assert_consumes (expect 4 0 s) H x Hx s s0.
+  consumes expect_consumes H Hx.
+  injection H. intros. subst. assumption.
+Qed.
+
+Definition rrmovl (s: stream): option (ast.instruction * stream) :=
+  do (cond, s) <- (condition s);
+  do (reg1, s) <- (register s);
+  do (reg2, s) <- (register s);
+  Some (ast.rrmovl cond reg1 reg2, s).
 
 Fact rrmovl_consumes: consumes (rrmovl).
 Proof.
@@ -417,10 +441,8 @@ Qed.
 Definition instruction (s: stream) : option (ast.instruction * stream) :=
   do (n, s) <- (number 4 s);
   match n with
-  | 0%N => do (_, s) <- (expect 4 0 s);
-           Some (ast.halt, s)
-  | 1%N => do (_, s) <- (expect 4 0 s);
-           Some (ast.nop, s)
+  | 0%N => halt s
+  | 1%N => nop s
   | 2%N => rrmovl s
   | 3%N => irmovl s
   | 4%N => rmmovl s
@@ -445,10 +467,8 @@ Proof.
     try destruct p;
     try destruct p;
     try destruct p;
-    try discriminate;
-    try (assert_consumes (expect 4 0 s0) H x Hx s0 s1;
-         consumes expect_consumes H Hx;
-         injection H; intros; subst; assumption).
+    try discriminate.
+  consumes halt_consumes H H.
   consumes popl_consumes H H.
   consumes jump_consumes H H.
   consumes ret_consumes H H.
@@ -459,6 +479,7 @@ Proof.
   consumes call_consumes H H.
   consumes rmmovl_consumes H H.
   consumes rrmovl_consumes H H.
+  consumes nop_consumes H H.
 Qed.
 
 (* Decodes a stream of instructions, manual termination proof *)
