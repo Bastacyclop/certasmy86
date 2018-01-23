@@ -97,13 +97,20 @@ Ltac immediate_encdec i := destruct i; rewrite immediate_encdec.
 Ltac displacement_encdec i := destruct i; rewrite displacement_encdec.
 Ltac destination_encdec i := destruct i; rewrite destination_encdec.
 
+Lemma size_nat: forall (n: N)(s: nat),
+  (n <= N.of_nat (Nat.pow s 2))%N -> (N.size_nat n) <= s.
+Proof.
+Admitted.
 
 Lemma reg_is_4bits: forall (n: N), (n <= ast.reg_max)%N -> N.size_nat n <= ast.register_bits.
 Proof.
   intros.
-  destruct n.
-    - simpl. omega.
-    - simpl. admit. 
+  apply size_nat.
+  apply N.le_trans with (m:=ast.reg_max).
+  assumption.
+  unfold ast.reg_max.
+  simpl. 
+  admit.
 Admitted.
 
 Lemma cst_is_32bits: forall (n: N), (n <= ast.cst_max)%N -> N.size_nat n <= ast.constant_bits.
