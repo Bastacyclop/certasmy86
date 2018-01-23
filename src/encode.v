@@ -26,7 +26,6 @@ Proof.
     omega.
 Qed.
 
-
 Definition number_puts (bits: nat) (n: N) :=
   stream.puts (number bits n).
 
@@ -90,6 +89,7 @@ Definition destination (d: ast.destination) (s: stream): stream :=
   | ast.dst n => (number ast.constant_bits n s)
   end.
 
+(* Nice looking stream notation *)
 Notation "f '>>' v" := (f v)
                          (at level 60, right associativity).
 

@@ -2,6 +2,8 @@ Require Export Coq.Arith.Arith.
 Require Export Coq.omega.Omega.
 Require Export Lists.List.
 
+(* Case analysis on an option expression,
+   producing the associated HR and rewriting H with it *)
 Ltac mcase e H p HR :=
   case_eq e; try intros p HR; try intros HR; rewrite HR in H;
   try destruct p; try discriminate.

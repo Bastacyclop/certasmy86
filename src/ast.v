@@ -3,6 +3,8 @@ Require Import util.
 Definition constant_bits := 32.
 Definition register_bits := 4.
 
+(* Wrapper types for safety *)
+
 Inductive immediate: Type :=
 | imm: forall (i: N), immediate.
 Inductive displacement: Type :=
@@ -42,6 +44,8 @@ Inductive instruction: Type :=
 | popl: register -> instruction.
 
 Definition instructions := list instruction.
+
+(* Validity rules *)
 
 Definition valid_register (n: N): Prop := (n <= 7)%N.
 

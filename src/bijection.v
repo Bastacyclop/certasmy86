@@ -4,6 +4,10 @@ Require stream.
 Require encode.
 Require decode.
 
+(* Prove that there is a bijection between encoding and decoding,
+   since both encoding the result of decoding is identity
+   and that decoding the result of encoding is identity *)
+
 Lemma number_encdec:
   forall (bits: nat) (n: N) (s: stream.bit),
     (N.size_nat n) <= bits ->

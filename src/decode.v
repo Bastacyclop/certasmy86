@@ -5,10 +5,12 @@ Require stream.
 
 Definition stream := stream.bit.
 
+(* Option binding notation *)
 Notation "'do' '(' a ',' b ')' '<-' e ';' c" :=
   (match e with | None => None | Some (a, b) => c end)
     (at level 70, right associativity).
 
+(* Decodes a number from binary (little endian) *)
 Fixpoint number (bits: nat) (s: stream): option (N * stream) :=
   match bits with
   | 0 => Some (0%N, s)
@@ -98,6 +100,7 @@ Proof.
   omega.
 Qed.
 
+(* Ensures the expected number is decoded *)
 Definition expect (bits: nat) (expected: N) (s: stream):
   option (unit * stream) :=
   do (n, s) <- (number bits s);
@@ -119,8 +122,6 @@ Proof.
   - number_consumes H H0.
   - discriminate.
 Qed.
-
-(* Actual Code *)
 
 Definition condition (s: stream):
   option (ast.condition * stream) :=
@@ -148,6 +149,7 @@ Proof.
     try number_consumes H H0.
 Qed.
 
+(* mapping over number decoding consumes the stream too *)
 Ltac map_number_consumes n e s H p HR :=
   unfold n, consumes; intros;
   mcase (number e s) H p HR; number_consumes H HR.
@@ -188,17 +190,17 @@ Proof.
   map_number_consumes destination ast.constant_bits s H p H0.
 Qed.
 
-(* Actual instruction decoding *)
-
 Definition rrmovl (s: stream): option (ast.instruction * stream) :=
   do (cond, s) <- (condition s);
   do (reg1, s) <- (register s);
   do (reg2, s) <- (register s);
   Some (ast.rrmovl cond reg1 reg2, s).
 
+(* Asserts that e consumes the stream *)
 Ltac assert_consumes e H n HR s s' :=
   mcase e H n HR;
   assert (stream.length s' < stream.length s).
+(* Use an assumption to progress with transitivity *)
 Ltac consumes_trans s' :=
   apply lt_trans with (stream.length s'); try assumption.
 
@@ -459,6 +461,7 @@ Proof.
   consumes rrmovl_consumes H H.
 Qed.
 
+(* Decodes a stream of instructions, manual termination proof *)
 Require Coq.Program.Wf.
 Program Fixpoint instructions_rec
         (s: stream) (acc: ast.instructions)
