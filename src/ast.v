@@ -12,9 +12,6 @@ Inductive destination: Type :=
 Inductive register: Type :=
 | reg: forall (r: N), register.
 
-Definition cst_max := 4294967295%N.
-Definition reg_max := 7%N.
-
 Inductive operator: Set :=
 | addl
 | subl
@@ -45,58 +42,44 @@ Inductive instruction: Type :=
 | popl: register -> instruction.
 
 Definition instructions := list instruction.
+
+Definition valid_register (n: N): Prop := (n <= 7)%N.
+
+Definition valid_constant (n: N): Prop := N.size_nat n <= constant_bits.
+
 Inductive valid_instruction: instruction -> Type :=
 | valid_halt: valid_instruction halt
 | valid_nop: valid_instruction nop
-| valid_rrmovl: forall(c: condition)(n1 n2: N),
-                  (n1 <= reg_max)%N ->
-                  (n2 <= reg_max)%N ->
-                    valid_instruction (rrmovl c (reg n1) (reg n2))
-| valid_irmovl: forall(n1 n2: N),
-                  (n1 <= reg_max)%N ->
-                  (n2 <= cst_max)%N ->
-                    valid_instruction (irmovl (reg n1) (imm n2))
-| valid_rmmovl: forall(n1 n2 n3: N),
-                  (n1 <= reg_max)%N ->
-                  (n2 <= reg_max)%N ->
-                  (n3 <= cst_max)%N ->
-                    valid_instruction (rmmovl (reg n1) (reg n2) (dsp n3))
-| valid_mrmovl: forall(n1 n2 n3: N),
-                  (n1 <= reg_max)%N ->
-                  (n2 <= reg_max)%N ->
-                  (n3 <= cst_max)%N ->
-                    valid_instruction (mrmovl (reg n1) (reg n2) (dsp n3))
-| valid_OPl: forall(o: operator)(n1 n2: N),
-                  (n1 <= reg_max)%N ->
-                  (n2 <= reg_max)%N ->
-                    valid_instruction (OPl o (reg n1) (reg n2))
-| valid_jump: forall(c: condition)(n: N),
-                  (n <= cst_max)%N ->
-                    valid_instruction (jump c (dst n))
-| valid_call: forall(n: N),
-                  (n <= cst_max)%N ->
-                    valid_instruction (call (dst n))
+| valid_rrmovl: forall(c: condition)(r1 r2: N),
+                  valid_register r1 ->
+                  valid_register r2 ->
+                    valid_instruction (rrmovl c (reg r1) (reg r2))
+| valid_irmovl: forall(r1 c: N),
+                  valid_register r1 ->
+                  N.size_nat c <= constant_bits ->
+                    valid_instruction (irmovl (reg r1) (imm c))
+| valid_rmmovl: forall(r1 r2 c: N),
+                  valid_register r1 ->
+                  valid_register r2 ->
+                  N.size_nat c <= constant_bits ->
+                    valid_instruction (rmmovl (reg r1) (reg r2) (dsp c))
+| valid_mrmovl: forall(r1 r2 c: N),
+                  valid_register r1 ->
+                  valid_register r2 ->
+                  valid_constant c ->
+                    valid_instruction (mrmovl (reg r1) (reg r2) (dsp c))
+| valid_OPl: forall(o: operator)(r1 r2: N),
+                  valid_register r1 ->
+                  valid_register r2 ->
+                    valid_instruction (OPl o (reg r1) (reg r2))
+| valid_jump: forall(cond: condition)(c: N),
+                  valid_constant c ->
+                    valid_instruction (jump cond (dst c))
+| valid_call: forall(c: N),
+                  valid_constant c ->
+                    valid_instruction (call (dst c))
 | valid_ret: valid_instruction ret
-| valid_pushl: forall(n: N),
-                    (n <= reg_max)%N -> valid_instruction (pushl (reg n))
-| valid_popl:  forall(n: N),
-                    (n <= reg_max)%N -> valid_instruction (popl (reg n)).
-(*
-Inductive valid_instruction (i: instruction): Type :=
-| valid_halt: valid_instruction halt
-| valid_nop: valid_instruction nop
-| valid_rrmovl: forall(c: condition)(n1 n2: N),
-    N.le n1 nb_registers -> N.le n2 nb_registers -> valid_instruction (rrmovl c (reg n1) (reg n2))
-| valid_irmovl: forall(i: immediate)(n: N),
-    n <= nb_registers -> valid_instruction irmovl.
-| valid_rmmovl: forall(n1: N)(i: immediate)(n2: N),
-    n1 <= nb_registers -> n2 <= nb_registers -> valid_instruction rmmovl.
-| valid_mrmovl: forall(d: displacement)(n1 n2: N),
-    n1 <= nb_registers -> n2 <= nb_registers -> valid_instruction mrmovl.
-| valid_OPl: forall(o: operator)(n1 n2: N),
-    n1 <= nb_registers -> n2 <= nb_registers -> valid_instruction OPl.
-| valid_jump: valid_instruction jump
-| valid_call: valid_instruction call
-| valid_ret: valid_instruction ret
-| valid_pushl: forall(n: N), n <= nb_registers -> valid_instruction pushl
-| valid_popl:  forall(n: N), n <= nb_registers -> valid_instruction popl.*)
+| valid_pushl: forall(r: N),
+                    valid_register r -> valid_instruction (pushl (reg r))
+| valid_popl:  forall(r: N),
+                    valid_register r -> valid_instruction (popl (reg r)).

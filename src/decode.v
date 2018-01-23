@@ -5,8 +5,6 @@ Require stream.
 
 Definition stream := stream.bit.
 
-(* Helpers *)
-
 Notation "'do' '(' a ',' b ')' '<-' e ';' c" :=
   (match e with | None => None | Some (a, b) => c end)
     (at level 70, right associativity).
@@ -149,8 +147,6 @@ Proof.
     try discriminate;
     try number_consumes H H0.
 Qed.
-
-(* TODO: whatappenz with invalid values *)
 
 Ltac map_number_consumes n e s H p HR :=
   unfold n, consumes; intros;

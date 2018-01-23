@@ -22,3 +22,8 @@ Proof.
     + contradict H. apply gt_not_le. apply positive_size_lt0.
   - admit.
 Admitted.
+
+Lemma size_nat: forall (n: N)(s: nat),
+  (n <= N.of_nat (Nat.pow s 2))%N -> (N.size_nat n) <= s.
+Proof.
+Admitted.

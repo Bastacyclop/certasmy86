@@ -89,53 +89,33 @@ Proof.
   destruct op; number_encdec; reflexivity.
 Qed.
 
-Ltac expect_encdec :=
-  unfold decode.expect; number_encdec; rewrite N.eqb_refl.
-
-Ltac register_encdec r := destruct r; rewrite register_encdec.
-Ltac immediate_encdec i := destruct i; rewrite immediate_encdec.
-Ltac displacement_encdec i := destruct i; rewrite displacement_encdec.
-Ltac destination_encdec i := destruct i; rewrite destination_encdec.
-
-Lemma size_nat: forall (n: N)(s: nat),
-  (n <= N.of_nat (Nat.pow s 2))%N -> (N.size_nat n) <= s.
-Proof.
-Admitted.
-
-Lemma reg_is_4bits: forall (n: N), (n <= ast.reg_max)%N -> N.size_nat n <= ast.register_bits.
+Lemma reg_is_4bits: forall (n: N), ast.valid_register n -> N.size_nat n <= ast.register_bits.
 Proof.
   intros.
   apply size_nat.
-  apply N.le_trans with (m:=ast.reg_max).
+  unfold ast.valid_register in H.
+  simpl.
+  apply N.le_trans with (m:=7%N).
   assumption.
-  unfold ast.reg_max.
-  simpl. 
-  admit.
-Admitted.
-
-Lemma cst_is_32bits: forall (n: N), (n <= ast.cst_max)%N -> N.size_nat n <= ast.constant_bits.
-Proof.
-  admit.
-Admitted.
-
-Ltac ins_arg_validity h := inversion h; try discriminate; try apply reg_is_4bits; try apply cst_is_32bits; try assumption. 
-
-(*
-Fact le_on_nat_eq_N: forall (a b: nat),
-  (a <= b) -> (N.of_nat a <= N.of_nat b)%N.
-Proof.
- intros.
- compute.
- 
-Admitted.
-
-Fact le_on_N_eq_nat: forall (a b: N),
-(a <= b)%N -> (N.to_nat a <= N.to_nat b) .
-Proof.
+  compute.
   intros.
-Admitted.
-*)
+  discriminate.
+Qed.
 
+Ltac expect_encdec :=
+  unfold decode.expect; number_encdec; rewrite N.eqb_refl.
+Ltac register_encdec r H :=
+  destruct r; rewrite register_encdec;
+  try (inversion H; apply reg_is_4bits; assumption).
+Ltac immediate_encdec i H :=
+  destruct i; rewrite immediate_encdec;
+  try (inversion H; assumption).
+Ltac displacement_encdec i H :=
+  destruct i; rewrite displacement_encdec;
+  try (inversion H; assumption).
+Ltac destination_encdec i H :=
+  destruct i; rewrite destination_encdec;
+  try (inversion H; assumption).
 
 Lemma instruction_encdec:
   forall (i: ast.instruction) (s: stream.bit),
@@ -149,70 +129,53 @@ Proof.
   - expect_encdec. reflexivity.
   - unfold decode.rrmovl.
     rewrite condition_encdec.
-    register_encdec r.
-    register_encdec r0.
-    + reflexivity.
-    + ins_arg_validity H.
-    + ins_arg_validity H.
+    register_encdec r H.
+    register_encdec r0 H.
+    reflexivity.
   - unfold decode.irmovl.
     expect_encdec.
     expect_encdec.
-    register_encdec r.
-    immediate_encdec i.
+    register_encdec r H.
+    immediate_encdec i H.
     reflexivity.
-    ins_arg_validity H.
-    ins_arg_validity H.
   - unfold decode.rmmovl.
     expect_encdec.
-    register_encdec r.
-    register_encdec r0.
-    displacement_encdec d.
+    register_encdec r H.
+    register_encdec r0 H.
+    displacement_encdec d H.
     reflexivity.
-    inversion H; try discriminate.
-    ins_arg_validity H.
-    ins_arg_validity H.
-    ins_arg_validity H.
   - unfold decode.mrmovl.
     expect_encdec.
-    register_encdec r.
-    register_encdec r0.
-    displacement_encdec d.
+    register_encdec r H.
+    register_encdec r0 H.
+    displacement_encdec d H.
     reflexivity.
-    ins_arg_validity H.
-    ins_arg_validity H.
-    ins_arg_validity H.
   - unfold decode.OPl.
     rewrite operator_encdec.
-    register_encdec r.
-    register_encdec r0.
+    register_encdec r H.
+    register_encdec r0 H.
     reflexivity.
-    ins_arg_validity H.
-    ins_arg_validity H.
   - unfold decode.jump.
     rewrite condition_encdec.
-    destination_encdec d.
+    destination_encdec d H.
     reflexivity.
-    ins_arg_validity H.
   - unfold decode.call.
     expect_encdec.
-    destination_encdec d.
+    destination_encdec d H.
     reflexivity.
-    ins_arg_validity H.
   - unfold decode.ret.
     expect_encdec.
     reflexivity.
   - unfold decode.pushl.
     expect_encdec.
-    register_encdec r.
+    register_encdec r H.
     expect_encdec.
     reflexivity.
-    ins_arg_validity H.
   - unfold decode.popl.
     expect_encdec.
-    register_encdec r.
+    register_encdec r H.
     expect_encdec.
     reflexivity.
-    ins_arg_validity H.
 Qed.
 
 Ltac injected H :=
